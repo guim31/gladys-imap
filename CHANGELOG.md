@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-14
+
 ### Added
 
 - Watch up to three IMAP mailboxes (TLS or required STARTTLS, app passwords),
@@ -29,4 +31,5 @@ the notes of the version's GitHub Release.
 - Nothing is marked as read by the checks (BODY.PEEK), no body is stored, only
   the mails arriving after the first start fire.
 
-[Unreleased]: https://github.com/guim31/gladys-imap/commits/main
+[Unreleased]: https://github.com/guim31/gladys-imap/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-imap/releases/tag/v1.0.0
