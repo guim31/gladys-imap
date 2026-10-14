@@ -9,15 +9,16 @@ A Gladys Assistant **external integration**: a Node.js service (Node 22+, ESM,
 no build step) that runs in its own sandboxed Docker container and talks to
 Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
-its only runtime dependency. It started from the official JavaScript template.
+and to the mail servers through [imapflow](https://github.com/postalsys/imapflow):
+its two runtime dependencies. It started from the official JavaScript template.
 
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/app.test.js              # one file
+node --test --test-name-pattern "mark"    # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
@@ -31,16 +32,20 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
+index.js                          SDK wiring only: registerHandlers + connect()
+src/app.js                        every SDK handler, on a GladysIntegration or the fake Gladys
+src/hub.js                        the mailboxes, devices, counters, scene events, status, actions
+src/mailbox.js                    one IMAP account (imapflow): IDLE, checks, reconnection, actions
+src/message.js                    headers, extract, keywords, mail reference
+src/devices.js                    one device per mailbox (unread counter)
 src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/widgets.js                    the "Latest mails" widget (manifest `widgets`)
+src/texts.js                      every text sent to Gladys, in en/fr/de/es
+src/store.js, src/log.js          /data persistence (last UID per folder), once-only failure logs
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
-gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+gladys-assistant-integration.json manifest: name, config_schema, actions, triggers, widget...
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (mandatory)
+test/                             node --test, fake Gladys (integration-sdk/testing) + fake IMAP server
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -70,8 +75,9 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** exists in English, French, German and Spanish: action
+  messages, manifest texts, and `docs/{en,fr,de,es}.md`, kept in sync
+  (`test/i18n.test.js`).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -233,3 +239,30 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Intégration IMAP (propre à ce dépôt)
+
+- **Réception seulement** : l'envoi est le travail de `GladysAssistant/gladys-smtp`. Ne rien ajouter qui
+  envoie, déplace ou supprime un mail. La seule écriture est l'action de scène « Marquer comme lu », sur
+  la référence `uidvalidity:uid:dossier` passée par le déclencheur (UIDVALIDITY vérifiée). « Déplacer »
+  a été écarté (risque de perdre un mail sur une faute de frappe ; les filtres Sieve du serveur le font
+  mieux).
+- **imapflow** (MIT, ^2.4) : `logger: false` (sinon pino sur stdout), `doSTARTTLS: true` en STARTTLS
+  (sans lui, imapflow continue **en clair** si le serveur ne propose pas STARTTLS), réponses bornées
+  (`maxLiteralSize` etc.). Ses lectures (`fetch` envelope/bodyStructure, `download`) passent par
+  `BODY.PEEK` : rien n'est marqué comme lu. Un `download` ne doit **jamais** tourner dans une boucle
+  `for await` de `fetch` (blocage) : collecter d'abord.
+- **IDLE démarre `autoIdleDelay` après la dernière commande** (15 s par défaut) : un mail arrivé entre
+  deux attendait 15 s. Réglé à 1 s, mesuré à 0,2-0,6 s contre GreenMail. IDLE ne suit que le dossier
+  sélectionné : le premier dossier, resélectionné après chaque opération ailleurs (`inFolder`).
+- `UID FETCH n:*` renvoie toujours au moins le dernier message, même d'UID < n : filtrer `uid > lastUid`.
+- Mémoire bornée : dernier UID par dossier dans `/data`, ligne de base au premier démarrage et à chaque
+  nouvelle UIDVALIDITY, 20 mails au plus par dossier en rattrapage.
+- Les filtres de scène ne font que l'égalité : adresses émises en minuscules, « objet contient » passe
+  par les mots-clés de la configuration (un déclencheur par mot-clé trouvé), émis tels que tapés.
+- Plusieurs comptes = trois blocs fixes `account_<n>_…` : une action ne peut pas porter de mot de passe
+  (#3154). L'`external_id` dérive de `utilisateur@serveur` (haché), pas du numéro de bloc.
+- **GreenMail** (test réel, `greenmail/standalone`, ports 3025 SMTP / 3143 IMAP / 3993 IMAPS) : avec
+  `-Dgreenmail.auth.disabled=false`, **n'importe quel mot de passe est accepté** ; sans cette option,
+  le mauvais mot de passe est bien refusé. GreenMail ne propose pas STARTTLS : le cas réussi n'a pas pu
+  être vérifié. L'image n'est pas sur `mirror.gcr.io` : la tirer de Docker Hub.
