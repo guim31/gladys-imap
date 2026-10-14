@@ -255,7 +255,15 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - **IDLE démarre `autoIdleDelay` après la dernière commande** (15 s par défaut) : un mail arrivé entre
   deux attendait 15 s. Réglé à 1 s, mesuré à 0,2-0,6 s contre GreenMail. IDLE ne suit que le dossier
   sélectionné : le premier dossier, resélectionné après chaque opération ailleurs (`inFolder`).
-- `UID FETCH n:*` renvoie toujours au moins le dernier message, même d'UID < n : filtrer `uid > lastUid`.
+- `UID SEARCH UID n:*` puis `UID FETCH` des 20 plus récents seulement : un import de milliers de
+  mails ne charge que des numéros. `n:*` renvoie toujours au moins le dernier message, même d'UID < n :
+  filtrer `uid > lastUid`. `mailbox.uidNext` n'est pas tenu à jour par les EXISTS d'imapflow.
+- Le chemin des événements `exists` porte le préfixe d'espace de noms du serveur (`INBOX.Alerts` pour
+  `Alerts`) : le ramener au dossier configuré (`paths`), sinon ligne de base et doublons.
+- Le SDK n'attend pas un gestionnaire avant le suivant : deux enregistrements de configuration de suite
+  lançaient `apply()` deux fois (deux connexions pour une boîte). `apply`/`stop` sont sérialisés.
+- `status()` d'imapflow renvoie `false` avant l'authentification : la file d'opérations refuse tout
+  tant que la connexion n'est pas prête, sinon « 0 non lu » publié pendant une reconnexion.
 - Mémoire bornée : dernier UID par dossier dans `/data`, ligne de base au premier démarrage et à chaque
   nouvelle UIDVALIDITY, 20 mails au plus par dossier en rattrapage.
 - Les filtres de scène ne font que l'égalité : adresses émises en minuscules, « objet contient » passe

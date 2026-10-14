@@ -120,6 +120,14 @@ function parseAccounts(config) {
     if (!host || !username || !password) {
       continue;
     }
+    // The same login on the same server twice would be one device twice.
+    if (
+      accounts.some(
+        (other) => other.host === host && other.username.toLowerCase() === username.toLowerCase(),
+      )
+    ) {
+      continue;
+    }
     const security = SECURITY_MODES.includes(value('security')) ? value('security') : 'tls';
     accounts.push({
       slot,

@@ -234,7 +234,7 @@ test('"Test the connection" reports each mailbox in the configured language', as
       ...ACCOUNT_1,
       account_1_folders: 'INBOX, Nope',
       account_2_host: HOST,
-      account_2_username: USER,
+      account_2_username: 'bob',
       account_2_password: 'wrong',
       language: 'en',
     },
@@ -288,4 +288,81 @@ test('a reconnection to Gladys publishes devices, counter and status again', asy
   assert.equal(w.fake.states.length, states + 1);
   assert.deepEqual(w.fake.connectionStatuses.at(-1), { connected: true });
   assert.equal(w.server.openClients.length, 1, 'the IMAP connection is kept');
+});
+
+// --- Regressions found by the review ------------------------------------------
+
+test('after outages, the periodic check runs once per interval, not once per outage', async (t) => {
+  const w = await world(t, { config: { ...ACCOUNT_1, check_interval: '1' } });
+  for (let i = 0; i < 3; i += 1) {
+    w.server.down = true;
+    w.server.dropConnections();
+    await settle();
+    w.server.down = false;
+    await w.clock.advance(RETRY_DELAYS_MS[0]);
+  }
+  const before = w.server.searches;
+  await w.clock.advance(3 * 60_000);
+  assert.equal(w.server.searches - before, 3);
+});
+
+test('two configuration saves in a row leave one connection per mailbox', async (t) => {
+  const w = await world(t);
+  await Promise.all([
+    w.fake.configUpdated({ ...ACCOUNT_1, language: 'en' }),
+    w.fake.configUpdated({ ...ACCOUNT_1, language: 'de' }),
+  ]);
+  await settle();
+  assert.equal(w.server.openClients.length, 1);
+  assert.equal(w.hub.mailboxes.length, 1);
+});
+
+test('while reconnecting, the unread count is an error, never 0', async (t) => {
+  const w = await world(t);
+  w.server.deliver('INBOX', mail(), { notify: false });
+  await w.clock.advance(2 * 60_000);
+  assert.equal(w.fake.lastState(unreadFeature(w)), 1);
+  w.server.down = true;
+  w.server.dropConnections();
+  await settle();
+  const ack = await w.fake.sceneAction('get_unread_count', {
+    mailbox: w.fake.discoveredDevices[0].external_id,
+  });
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /ne répond pas/);
+  assert.equal(w.fake.lastState(unreadFeature(w)), 1);
+});
+
+test('a server prefixing the folders ("INBOX.Alerts") fires each mail once', async (t) => {
+  const server = new FakeImapServer({ folders: ['INBOX', 'Alerts'], prefix: 'INBOX.' });
+  const w = await world(t, {
+    server,
+    config: { ...ACCOUNT_1, account_1_folders: 'Alerts, INBOX' },
+  });
+  server.deliver('Alerts', mail({ subject: 'real time' }));
+  await settle();
+  await w.clock.advance(4 * 60_000);
+  const events = sceneEvents(w.fake);
+  assert.deepEqual(
+    events.map((event) => [event.data.folder, event.data.subject]),
+    [['Alerts', 'real time']],
+  );
+  const ack = await w.fake.sceneAction('mark_as_read', {
+    mailbox: events[0].data.mailbox,
+    message_ref: events[0].data.message_ref,
+  });
+  assert.equal(ack.success, true);
+});
+
+test('only the newest mails are fetched after a bulk arrival', async (t) => {
+  const w = await world(t);
+  w.server.deliver(
+    'INBOX',
+    Array.from({ length: 500 }, (_, i) => mail({ subject: `bulk ${i}` })),
+    { notify: false },
+  );
+  w.server.downloads.length = 0;
+  await w.clock.advance(2 * 60_000);
+  assert.equal(sceneEvents(w.fake).length, MAX_CATCHUP);
+  assert.equal(w.server.downloads.length, MAX_CATCHUP);
 });

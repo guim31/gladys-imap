@@ -86,3 +86,18 @@ test('options: unknown values fall back to the defaults', () => {
   assert.equal(config.sendSnippet, false);
   assert.equal(normalizeConfig({ check_interval: 15 }).checkIntervalMs, 900_000);
 });
+
+test('the same login on the same server twice is one mailbox', () => {
+  const config = normalizeConfig({
+    account_1_host: 'imap.example.com',
+    account_1_username: 'Alice@example.com',
+    account_1_password: 'a',
+    account_2_host: 'IMAP.example.com',
+    account_2_username: 'alice@example.com',
+    account_2_password: 'b',
+  });
+  assert.deepEqual(
+    config.accounts.map((account) => account.slot),
+    [1],
+  );
+});

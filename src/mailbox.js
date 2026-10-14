@@ -26,9 +26,6 @@ import { SNIPPET_BYTES, describeMessage, findTextPart, makeSnippet } from './mes
 const logger = createLogger({ name: 'imap-mailbox' });
 
 export const MAX_CATCHUP = 20;
-// Only the last UIDs are fetched when a folder grew a lot while the
-// integration was away: everything older is skipped anyway (MAX_CATCHUP).
-const FETCH_WINDOW = 200;
 export const RECENT_SIZE = 8;
 // Reconnection delays, then the last one forever. A refused password waits
 // longer: some providers lock an account after repeated failures.
@@ -99,8 +96,8 @@ export function classifyError(err) {
   return ERROR_KINDS.OTHER;
 }
 
-export function kindError(kind, message) {
-  const err = new Error(message);
+export function kindError(kind, message, options) {
+  const err = new Error(message, options);
   err.kind = kind;
   return err;
 }
@@ -205,6 +202,7 @@ export class Mailbox {
     this.unread = null;
     this.recent = [];
     this.missingFolders = new Set();
+    this.paths = new Map(); // path opened by imapflow -> configured folder
     this.stopped = true;
     this.attempt = 0;
     this.retryTimer = null;
@@ -244,11 +242,18 @@ export class Mailbox {
     }
   }
 
-  /** Runs operations one after the other on the single connection. */
-  queue(operation) {
+  /**
+   * Runs operations one after the other on the single connection. Refused
+   * until the connection is up (logged in and first check done), except for
+   * the first check itself: a STATUS before the login answers nothing, which
+   * would read as "0 unread".
+   */
+  queue(operation, { connecting = false } = {}) {
     const run = this.chain.then(() => {
-      if (!this.client || this.stopped) {
-        throw kindError(ERROR_KINDS.NETWORK, `${this.label} is not connected`);
+      if (!this.client || this.stopped || (!this.connected && !connecting)) {
+        const err = kindError(ERROR_KINDS.NETWORK, `${this.label} is not connected`);
+        err.notReady = true;
+        throw err;
       }
       return operation(this.client);
     });
@@ -257,8 +262,8 @@ export class Mailbox {
   }
 
   async connect() {
-    if (this.stopped) {
-      return;
+    if (this.stopped || this.client) {
+      return; // stopped, or a connection is already open or opening
     }
     const client = this.createClient(clientOptions(this.account));
     this.client = client;
@@ -266,9 +271,13 @@ export class Mailbox {
     client.on('error', (err) => logger.debug(`${this.label}: ${err.message}`));
     client.on('close', () => this.onClose(client));
     client.on('exists', (event) => {
-      if (event.count > event.prevCount) {
+      // imapflow reports the path it opened, namespace prefix included
+      // ("INBOX.Alerts" for "Alerts" on some servers): back to the folder
+      // of the configuration, or ignored.
+      const folder = this.paths.get(event.path);
+      if (this.connected && folder && event.count > event.prevCount) {
         this.queue(async () => {
-          await this.checkFolder(event.path);
+          await this.checkFolder(folder);
           await this.refreshUnread();
         }).catch((err) => this.onCheckError(err));
       }
@@ -279,7 +288,7 @@ export class Mailbox {
       await client.connect();
       // Baseline or catch-up of every folder, the first one last so that IDLE
       // runs on it afterwards.
-      await this.queue(() => this.checkAll({ loadRecent: true }));
+      await this.queue(() => this.checkAll({ loadRecent: true }), { connecting: true });
       this.connected = true;
       this.attempt = 0;
       this.lastErrorKind = null;
@@ -339,11 +348,21 @@ export class Mailbox {
     if (this.stopped) {
       return;
     }
+    if (this.checkTimer) {
+      this.timers.clearTimeout(this.checkTimer);
+    }
+    const client = this.client;
     this.checkTimer = this.timers.setTimeout(() => {
       this.checkTimer = null;
       this.queue(() => this.checkAll())
         .catch((err) => this.onCheckError(err))
-        .finally(() => this.scheduleCheck());
+        .finally(() => {
+          // Only on the same, still healthy connection: a reconnection arms
+          // its own timer, and a stale one would pile up checks.
+          if (this.client === client && this.connected) {
+            this.scheduleCheck();
+          }
+        });
     }, this.checkIntervalMs);
   }
 
@@ -359,7 +378,7 @@ export class Mailbox {
 
   onCheckError(err) {
     const client = this.client;
-    if (!client) {
+    if (!client || err?.notReady) {
       return;
     }
     // A broken connection reconnects; anything else is logged and the next
@@ -383,20 +402,25 @@ export class Mailbox {
   /** Locks a folder, runs `fn`, then selects the first folder again (IDLE). */
   async inFolder(folder, fn) {
     const client = this.client;
-    let lock;
     try {
-      lock = await client.getMailboxLock(folder);
-    } catch (err) {
-      if (classifyError(err) === ERROR_KINDS.FOLDER || err.mailboxMissing) {
-        throw kindError(ERROR_KINDS.FOLDER, `folder "${folder}" not found`);
+      let lock;
+      try {
+        lock = await client.getMailboxLock(folder);
+      } catch (err) {
+        if (classifyError(err) === ERROR_KINDS.FOLDER || err.mailboxMissing) {
+          throw kindError(ERROR_KINDS.FOLDER, `folder "${folder}" not found`, { cause: err });
+        }
+        throw err;
       }
-      throw err;
-    }
-    try {
-      return await fn(client, client.mailbox);
+      try {
+        this.paths.set(client.mailbox.path, folder);
+        return await fn(client, client.mailbox);
+      } finally {
+        lock.release();
+      }
     } finally {
-      lock.release();
-      if (folder !== this.primary && !this.missingFolders.has(this.primary)) {
+      // Also after a failed SELECT, which leaves no folder selected.
+      if (folder !== this.primary && !this.missingFolders.has(this.primary) && client.usable) {
         const back = await client.getMailboxLock(this.primary).catch(() => null);
         back?.release();
       }
@@ -442,29 +466,33 @@ export class Mailbox {
       logger.debug(`${this.label}: baseline of "${folder}" at UID ${lastUid}`);
       return [];
     }
-    const from = Math.max(known.lastUid + 1, (mailbox.uidNext ?? 0) - FETCH_WINDOW, 1);
-    const fetched = [];
+    // The UIDs first (numbers only, whatever arrived meanwhile), then the
+    // envelopes of the newest MAX_CATCHUP: memory stays bounded after an
+    // import of thousands of mails. "n:*" also returns the last message when
+    // no UID reaches n.
+    const found = await client.search({ uid: `${known.lastUid + 1}:*` }, { uid: true });
+    const uids = (Array.isArray(found) ? found : [])
+      .filter((uid) => uid > known.lastUid)
+      .sort((a, b) => a - b);
+    if (uids.length === 0) {
+      return [];
+    }
+    const lastUid = uids[uids.length - 1];
+    const keptUids = uids.slice(-MAX_CATCHUP);
+    if (uids.length > keptUids.length) {
+      logger.info(
+        `${this.label}: ${uids.length - keptUids.length} older new mails in "${folder}" skipped`,
+      );
+    }
+    const kept = [];
     for await (const message of client.fetch(
-      `${from}:*`,
+      keptUids.join(','),
       { uid: true, envelope: true, internalDate: true, bodyStructure: this.sendSnippet },
       { uid: true },
     )) {
-      // "n:*" also returns the last message when no UID reaches n.
-      if (message.uid > known.lastUid) {
-        fetched.push(message);
-      }
+      kept.push(message);
     }
-    if (fetched.length === 0) {
-      return [];
-    }
-    fetched.sort((a, b) => a.uid - b.uid);
-    const lastUid = fetched[fetched.length - 1].uid;
-    const kept = fetched.slice(-MAX_CATCHUP);
-    if (fetched.length > kept.length) {
-      logger.info(
-        `${this.label}: ${fetched.length - kept.length} older new mails in "${folder}" skipped`,
-      );
-    }
+    kept.sort((a, b) => a.uid - b.uid);
     const mails = [];
     // The extracts are downloaded after the FETCH loop: imapflow cannot run
     // a command while it streams another one.
@@ -550,7 +578,10 @@ export class Mailbox {
         continue;
       }
       const status = await client.status(folder, { unseen: true });
-      total += Number(status?.unseen ?? 0);
+      if (!status || typeof status.unseen !== 'number') {
+        throw kindError(ERROR_KINDS.NETWORK, `no unread count for "${folder}"`);
+      }
+      total += status.unseen;
     }
     return total;
   }

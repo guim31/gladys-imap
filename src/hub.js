@@ -43,6 +43,7 @@ export class ImapHub {
     this.published = new Map(); // feature external_id -> { value, at }
     this.heartbeat = null;
     this.lastStatus = null;
+    this.lifecycle = Promise.resolve();
   }
 
   async start(config) {
@@ -54,19 +55,39 @@ export class ImapHub {
     await this.apply(config);
   }
 
-  async stop() {
-    if (this.heartbeat) {
-      this.timers.clearInterval(this.heartbeat);
-      this.heartbeat = null;
-    }
-    await Promise.all(this.mailboxes.map((mailbox) => mailbox.stop()));
-    this.mailboxes = [];
-    await this.store.flush();
+  /**
+   * Runs start/stop of the mailboxes one at a time: the SDK does not wait
+   * for a handler before the next one, and two configuration saves in a row
+   * would otherwise open two connections for one mailbox.
+   */
+  serial(operation) {
+    const run = this.lifecycle.then(operation);
+    this.lifecycle = run.catch(() => {});
+    return run;
+  }
+
+  stop() {
+    return this.serial(async () => {
+      if (this.heartbeat) {
+        this.timers.clearInterval(this.heartbeat);
+        this.heartbeat = null;
+      }
+      const mailboxes = this.mailboxes;
+      this.mailboxes = [];
+      await Promise.all(mailboxes.map((mailbox) => mailbox.stop()));
+      await this.store.flush();
+    });
   }
 
   /** (Re)starts the mailboxes for a configuration. */
-  async apply(config) {
-    await Promise.all(this.mailboxes.map((mailbox) => mailbox.stop()));
+  apply(config) {
+    return this.serial(() => this.restart(config));
+  }
+
+  async restart(config) {
+    const previous = this.mailboxes;
+    this.mailboxes = [];
+    await Promise.all(previous.map((mailbox) => mailbox.stop()));
     this.config = config;
     this.published.clear();
     this.lastStatus = null;
@@ -77,7 +98,7 @@ export class ImapHub {
         this.store.save(this.data);
       },
     };
-    this.mailboxes = config.accounts.map(
+    const mailboxes = config.accounts.map(
       (account) =>
         new Mailbox({
           account,
@@ -90,13 +111,14 @@ export class ImapHub {
           onChange: (mailbox) => this.onChange(mailbox),
         }),
     );
-    logger.info(`Watching ${this.mailboxes.length} mailbox(es)`);
+    this.mailboxes = mailboxes;
+    logger.info(`Watching ${mailboxes.length} mailbox(es)`);
     await this.publishDevices();
-    if (this.mailboxes.length === 0) {
+    if (mailboxes.length === 0) {
       await this.gladys.setConnectionStatus(false, STATUS_NO_ACCOUNT).catch(() => {});
       return;
     }
-    await Promise.all(this.mailboxes.map((mailbox) => mailbox.start()));
+    await Promise.all(mailboxes.map((mailbox) => mailbox.start()));
     await this.publishStatus();
   }
 
@@ -185,7 +207,11 @@ export class ImapHub {
               render(down.map((mailbox) => mailbox.name).join(', ')),
             ]),
           );
-    await this.gladys.setConnectionStatus(down.length === 0, message).catch(() => {});
+    try {
+      await this.gladys.setConnectionStatus(down.length === 0, message);
+    } catch {
+      this.lastStatus = null; // sent again on the next change or check
+    }
   }
 
   refreshWidget() {

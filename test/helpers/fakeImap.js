@@ -64,8 +64,14 @@ function findPart(node, part) {
 }
 
 export class FakeImapServer {
-  constructor({ folders = ['INBOX'], users = { [USER]: PASSWORD } } = {}) {
+  /**
+   * @param {object} [options]
+   * @param {string} [options.prefix] namespace prefix the server adds to the
+   *   folders other than INBOX ("INBOX." on Courier), as imapflow reports it
+   */
+  constructor({ folders = ['INBOX'], users = { [USER]: PASSWORD }, prefix = '' } = {}) {
     this.users = users;
+    this.prefix = prefix;
     this.folders = new Map();
     for (const name of folders) {
       this.addFolder(name);
@@ -86,6 +92,11 @@ export class FakeImapServer {
     this.folders.set(name, { uidValidity, uidNext: 1, messages: [] });
   }
 
+  /** The path imapflow reports for a folder once opened. */
+  opened(name) {
+    return name === 'INBOX' ? name : `${this.prefix}${name}`;
+  }
+
   /** Stores mails in a folder; `notify` emits EXISTS to the clients that selected it. */
   deliver(folderName, mails, { notify = true } = {}) {
     const folder = this.folders.get(folderName);
@@ -96,11 +107,11 @@ export class FakeImapServer {
     }
     if (notify) {
       for (const client of this.clients) {
-        if (client.usable && client.mailbox?.path === folderName) {
+        if (client.usable && client.selected === folderName) {
           client.mailbox.exists = folder.messages.length;
           client.mailbox.uidNext = folder.uidNext;
           client.emit('exists', {
-            path: folderName,
+            path: this.opened(folderName),
             count: folder.messages.length,
             prevCount: folder.messages.length - list.length,
           });
@@ -159,6 +170,7 @@ export class FakeImapClient extends EventEmitter {
     if (this.usable) {
       this.usable = false;
       this.mailbox = false;
+      this.selected = null;
       this.emit('close');
     }
   }
@@ -193,8 +205,9 @@ export class FakeImapClient extends EventEmitter {
   async getMailboxLock(path) {
     this.checkUsable();
     const folder = this.folder(path);
+    this.selected = path;
     this.mailbox = {
-      path,
+      path: this.server.opened(path),
       uidValidity: folder.uidValidity,
       uidNext: folder.uidNext,
       exists: folder.messages.length,
@@ -203,7 +216,7 @@ export class FakeImapClient extends EventEmitter {
   }
 
   messagesOf(range, byUid) {
-    const folder = this.folder(this.mailbox.path);
+    const folder = this.folder(this.selected);
     const messages = folder.messages;
     if (messages.length === 0) {
       return [];
@@ -219,9 +232,24 @@ export class FakeImapClient extends EventEmitter {
     });
   }
 
+  async search(query, options = {}) {
+    this.checkUsable();
+    this.server.searches = (this.server.searches ?? 0) + 1;
+    return this.messagesOf(query.uid, options.uid === true).map((message) => message.uid);
+  }
+
+  messagesByList(range, byUid) {
+    if (!String(range).includes(',')) {
+      return this.messagesOf(range, byUid);
+    }
+    const wanted = new Set(String(range).split(',').map(Number));
+    return this.folder(this.selected).messages.filter((message) => wanted.has(message.uid));
+  }
+
   async *fetch(range, query, options = {}) {
     this.checkUsable();
-    for (const message of this.messagesOf(range, options.uid === true)) {
+    this.server.fetched = (this.server.fetched ?? 0) + 1;
+    for (const message of this.messagesByList(range, options.uid === true)) {
       yield {
         uid: message.uid,
         ...(query.envelope ? { envelope: structuredClone(message.envelope) } : {}),
@@ -259,7 +287,7 @@ export class FakeImapClient extends EventEmitter {
     const messages = this.messagesOf(range, options.uid === true);
     for (const message of messages) {
       flags.forEach((flag) => message.flags.add(flag));
-      this.server.flagChanges.push({ folder: this.mailbox.path, uid: message.uid, flags });
+      this.server.flagChanges.push({ folder: this.selected, uid: message.uid, flags });
     }
     return messages.length > 0;
   }
