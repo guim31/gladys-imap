@@ -1,177 +1,1193 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "IMAP Mail",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Incoming mails as scene triggers, unread counters and a widget of the latest mails.",
+    "fr": "Mails reçus en déclencheurs de scène, compteurs de non-lus et widget des derniers mails.",
+    "de": "Eingehende E-Mails als Szenenauslöser, Ungelesen-Zähler und ein Widget der neuesten E-Mails.",
+    "es": "Correos recibidos como desencadenantes, contadores de no leídos y un widget de últimos correos."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-imap:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-imap/main/cover.png",
+  "categories": ["notifications", "services"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Your mailboxes",
+        "fr": "Vos boîtes mail",
+        "de": "Deine Postfächer",
+        "es": "Sus buzones de correo"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Up to three IMAP mailboxes. Gladys only reads: nothing is sent, deleted or marked as read, except by the \"Mark as read\" scene action. Gmail, Outlook and iCloud need an app password.",
+        "fr": "Jusqu'à trois boîtes IMAP. Gladys ne fait que lire : rien n'est envoyé, supprimé ni marqué comme lu, sauf par l'action de scène « Marquer comme lu ». Gmail, Outlook et iCloud demandent un mot de passe d'application.",
+        "de": "Bis zu drei IMAP-Postfächer. Gladys liest nur: Nichts wird gesendet, gelöscht oder als gelesen markiert, außer durch die Szenenaktion „Als gelesen markieren“. Gmail, Outlook und iCloud verlangen ein App-Passwort.",
+        "es": "Hasta tres buzones IMAP. Gladys solo lee: no se envía, elimina ni marca nada como leído, salvo con la acción de escena «Marcar como leído». Gmail, Outlook e iCloud requieren una contraseña de aplicación."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://support.google.com/accounts/answer/185833",
+          "label": {
+            "en": "Gmail: app passwords",
+            "fr": "Gmail : mots de passe d'application",
+            "de": "Gmail: App-Passwörter",
+            "es": "Gmail: contraseñas de aplicación"
+          }
+        },
+        {
+          "url": "https://support.microsoft.com/account-billing/how-to-get-and-use-app-passwords-5896ed9b-4263-e681-128a-a6f2979a7944",
+          "label": {
+            "en": "Outlook: app passwords",
+            "fr": "Outlook : mots de passe d'application",
+            "de": "Outlook: App-Passwörter",
+            "es": "Outlook: contraseñas de aplicación"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "account_1",
+      "type": "section",
+      "label": {
+        "en": "Mailbox 1",
+        "fr": "Boîte mail 1",
+        "de": "Postfach 1",
+        "es": "Buzón 1"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "Leave the server empty to disable this mailbox.",
+        "fr": "Laissez le serveur vide pour désactiver cette boîte.",
+        "de": "Lass den Server leer, um dieses Postfach zu deaktivieren.",
+        "es": "Deje el servidor vacío para desactivar este buzón."
+      }
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "account_1_host",
+      "type": "string",
+      "label": {
+        "en": "IMAP server",
+        "fr": "Serveur IMAP",
+        "de": "IMAP-Server",
+        "es": "Servidor IMAP"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "placeholder": {
+        "en": "e.g. imap.gmail.com",
+        "fr": "ex. imap.gmail.com",
+        "de": "z. B. imap.gmail.com",
+        "es": "p. ej. imap.gmail.com"
+      },
+      "required": false
     },
     {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "key": "account_1_port",
+      "type": "number",
+      "label": {
+        "en": "Port",
+        "fr": "Port",
+        "de": "Port",
+        "es": "Puerto"
+      },
+      "description": {
+        "en": "993 for TLS, 143 for STARTTLS.",
+        "fr": "993 pour TLS, 143 pour STARTTLS.",
+        "de": "993 für TLS, 143 für STARTTLS.",
+        "es": "993 para TLS, 143 para STARTTLS."
+      },
       "required": false,
-      "default": "celsius",
+      "default": 993,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "account_1_security",
+      "type": "select",
+      "label": {
+        "en": "Security",
+        "fr": "Sécurité",
+        "de": "Sicherheit",
+        "es": "Seguridad"
+      },
+      "required": false,
+      "default": "tls",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "tls",
+          "label": {
+            "en": "TLS (port 993)",
+            "fr": "TLS (port 993)",
+            "de": "TLS (Port 993)",
+            "es": "TLS (puerto 993)"
+          }
+        },
+        {
+          "value": "starttls",
+          "label": {
+            "en": "STARTTLS (port 143)",
+            "fr": "STARTTLS (port 143)",
+            "de": "STARTTLS (Port 143)",
+            "es": "STARTTLS (puerto 143)"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "account_1_username",
+      "type": "string",
+      "label": {
+        "en": "User",
+        "fr": "Utilisateur",
+        "de": "Benutzer",
+        "es": "Usuario"
+      },
+      "placeholder": {
+        "en": "Usually the mail address",
+        "fr": "En général l'adresse mail",
+        "de": "Meist die E-Mail-Adresse",
+        "es": "Normalmente la dirección de correo"
+      },
+      "required": false
+    },
+    {
+      "key": "account_1_password",
+      "type": "secret",
+      "label": {
+        "en": "Password",
+        "fr": "Mot de passe",
+        "de": "Passwort",
+        "es": "Contraseña"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "The app password for Gmail, Outlook or iCloud.",
+        "fr": "Le mot de passe d'application pour Gmail, Outlook ou iCloud.",
+        "de": "Das App-Passwort bei Gmail, Outlook oder iCloud.",
+        "es": "La contraseña de aplicación para Gmail, Outlook o iCloud."
+      },
+      "required": false
+    },
+    {
+      "key": "account_1_folders",
+      "type": "string",
+      "label": {
+        "en": "Folders to watch",
+        "fr": "Dossiers à surveiller",
+        "de": "Zu überwachende Ordner",
+        "es": "Carpetas que vigilar"
+      },
+      "description": {
+        "en": "Comma-separated, 5 at most. The first one is watched in real time (IDLE).",
+        "fr": "Séparés par des virgules, 5 au plus. Le premier est surveillé en temps réel (IDLE).",
+        "de": "Durch Kommas getrennt, höchstens 5. Der erste wird in Echtzeit überwacht (IDLE).",
+        "es": "Separadas por comas, 5 como máximo. La primera se vigila en tiempo real (IDLE)."
+      },
+      "placeholder": {
+        "en": "e.g. INBOX, Alerts",
+        "fr": "ex. INBOX, Alertes",
+        "de": "z. B. INBOX, Alarme",
+        "es": "p. ej. INBOX, Alertas"
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "INBOX"
+    },
+    {
+      "key": "account_1_allow_self_signed",
+      "type": "boolean",
+      "label": {
+        "en": "Accept a self-signed certificate",
+        "fr": "Accepter un certificat auto-signé",
+        "de": "Selbstsigniertes Zertifikat akzeptieren",
+        "es": "Aceptar un certificado autofirmado"
+      },
+      "description": {
+        "en": "Only for a server of your own whose certificate you created yourself.",
+        "fr": "Seulement pour un serveur à vous dont vous avez créé le certificat.",
+        "de": "Nur für einen eigenen Server, dessen Zertifikat du selbst erstellt hast.",
+        "es": "Solo para un servidor propio cuyo certificado creó usted mismo."
+      },
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "account_2",
+      "type": "section",
+      "label": {
+        "en": "Mailbox 2",
+        "fr": "Boîte mail 2",
+        "de": "Postfach 2",
+        "es": "Buzón 2"
+      },
+      "description": {
+        "en": "Leave the server empty to disable this mailbox.",
+        "fr": "Laissez le serveur vide pour désactiver cette boîte.",
+        "de": "Lass den Server leer, um dieses Postfach zu deaktivieren.",
+        "es": "Deje el servidor vacío para desactivar este buzón."
+      }
+    },
+    {
+      "key": "account_2_host",
+      "type": "string",
+      "label": {
+        "en": "IMAP server",
+        "fr": "Serveur IMAP",
+        "de": "IMAP-Server",
+        "es": "Servidor IMAP"
+      },
+      "placeholder": {
+        "en": "e.g. imap.gmail.com",
+        "fr": "ex. imap.gmail.com",
+        "de": "z. B. imap.gmail.com",
+        "es": "p. ej. imap.gmail.com"
+      },
+      "required": false
+    },
+    {
+      "key": "account_2_port",
+      "type": "number",
+      "label": {
+        "en": "Port",
+        "fr": "Port",
+        "de": "Port",
+        "es": "Puerto"
+      },
+      "description": {
+        "en": "993 for TLS, 143 for STARTTLS.",
+        "fr": "993 pour TLS, 143 pour STARTTLS.",
+        "de": "993 für TLS, 143 für STARTTLS.",
+        "es": "993 para TLS, 143 para STARTTLS."
+      },
+      "required": false,
+      "default": 993,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "account_2_security",
+      "type": "select",
+      "label": {
+        "en": "Security",
+        "fr": "Sécurité",
+        "de": "Sicherheit",
+        "es": "Seguridad"
+      },
+      "required": false,
+      "default": "tls",
+      "options": [
+        {
+          "value": "tls",
+          "label": {
+            "en": "TLS (port 993)",
+            "fr": "TLS (port 993)",
+            "de": "TLS (Port 993)",
+            "es": "TLS (puerto 993)"
+          }
+        },
+        {
+          "value": "starttls",
+          "label": {
+            "en": "STARTTLS (port 143)",
+            "fr": "STARTTLS (port 143)",
+            "de": "STARTTLS (Port 143)",
+            "es": "STARTTLS (puerto 143)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "account_2_username",
+      "type": "string",
+      "label": {
+        "en": "User",
+        "fr": "Utilisateur",
+        "de": "Benutzer",
+        "es": "Usuario"
+      },
+      "placeholder": {
+        "en": "Usually the mail address",
+        "fr": "En général l'adresse mail",
+        "de": "Meist die E-Mail-Adresse",
+        "es": "Normalmente la dirección de correo"
+      },
+      "required": false
+    },
+    {
+      "key": "account_2_password",
+      "type": "secret",
+      "label": {
+        "en": "Password",
+        "fr": "Mot de passe",
+        "de": "Passwort",
+        "es": "Contraseña"
+      },
+      "description": {
+        "en": "The app password for Gmail, Outlook or iCloud.",
+        "fr": "Le mot de passe d'application pour Gmail, Outlook ou iCloud.",
+        "de": "Das App-Passwort bei Gmail, Outlook oder iCloud.",
+        "es": "La contraseña de aplicación para Gmail, Outlook o iCloud."
+      },
+      "required": false
+    },
+    {
+      "key": "account_2_folders",
+      "type": "string",
+      "label": {
+        "en": "Folders to watch",
+        "fr": "Dossiers à surveiller",
+        "de": "Zu überwachende Ordner",
+        "es": "Carpetas que vigilar"
+      },
+      "description": {
+        "en": "Comma-separated, 5 at most. The first one is watched in real time (IDLE).",
+        "fr": "Séparés par des virgules, 5 au plus. Le premier est surveillé en temps réel (IDLE).",
+        "de": "Durch Kommas getrennt, höchstens 5. Der erste wird in Echtzeit überwacht (IDLE).",
+        "es": "Separadas por comas, 5 como máximo. La primera se vigila en tiempo real (IDLE)."
+      },
+      "placeholder": {
+        "en": "e.g. INBOX, Alerts",
+        "fr": "ex. INBOX, Alertes",
+        "de": "z. B. INBOX, Alarme",
+        "es": "p. ej. INBOX, Alertas"
+      },
+      "required": false,
+      "default": "INBOX"
+    },
+    {
+      "key": "account_2_allow_self_signed",
+      "type": "boolean",
+      "label": {
+        "en": "Accept a self-signed certificate",
+        "fr": "Accepter un certificat auto-signé",
+        "de": "Selbstsigniertes Zertifikat akzeptieren",
+        "es": "Aceptar un certificado autofirmado"
+      },
+      "description": {
+        "en": "Only for a server of your own whose certificate you created yourself.",
+        "fr": "Seulement pour un serveur à vous dont vous avez créé le certificat.",
+        "de": "Nur für einen eigenen Server, dessen Zertifikat du selbst erstellt hast.",
+        "es": "Solo para un servidor propio cuyo certificado creó usted mismo."
+      },
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "account_3",
+      "type": "section",
+      "label": {
+        "en": "Mailbox 3",
+        "fr": "Boîte mail 3",
+        "de": "Postfach 3",
+        "es": "Buzón 3"
+      },
+      "description": {
+        "en": "Leave the server empty to disable this mailbox.",
+        "fr": "Laissez le serveur vide pour désactiver cette boîte.",
+        "de": "Lass den Server leer, um dieses Postfach zu deaktivieren.",
+        "es": "Deje el servidor vacío para desactivar este buzón."
+      }
+    },
+    {
+      "key": "account_3_host",
+      "type": "string",
+      "label": {
+        "en": "IMAP server",
+        "fr": "Serveur IMAP",
+        "de": "IMAP-Server",
+        "es": "Servidor IMAP"
+      },
+      "placeholder": {
+        "en": "e.g. imap.gmail.com",
+        "fr": "ex. imap.gmail.com",
+        "de": "z. B. imap.gmail.com",
+        "es": "p. ej. imap.gmail.com"
+      },
+      "required": false
+    },
+    {
+      "key": "account_3_port",
+      "type": "number",
+      "label": {
+        "en": "Port",
+        "fr": "Port",
+        "de": "Port",
+        "es": "Puerto"
+      },
+      "description": {
+        "en": "993 for TLS, 143 for STARTTLS.",
+        "fr": "993 pour TLS, 143 pour STARTTLS.",
+        "de": "993 für TLS, 143 für STARTTLS.",
+        "es": "993 para TLS, 143 para STARTTLS."
+      },
+      "required": false,
+      "default": 993,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "account_3_security",
+      "type": "select",
+      "label": {
+        "en": "Security",
+        "fr": "Sécurité",
+        "de": "Sicherheit",
+        "es": "Seguridad"
+      },
+      "required": false,
+      "default": "tls",
+      "options": [
+        {
+          "value": "tls",
+          "label": {
+            "en": "TLS (port 993)",
+            "fr": "TLS (port 993)",
+            "de": "TLS (Port 993)",
+            "es": "TLS (puerto 993)"
+          }
+        },
+        {
+          "value": "starttls",
+          "label": {
+            "en": "STARTTLS (port 143)",
+            "fr": "STARTTLS (port 143)",
+            "de": "STARTTLS (Port 143)",
+            "es": "STARTTLS (puerto 143)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "account_3_username",
+      "type": "string",
+      "label": {
+        "en": "User",
+        "fr": "Utilisateur",
+        "de": "Benutzer",
+        "es": "Usuario"
+      },
+      "placeholder": {
+        "en": "Usually the mail address",
+        "fr": "En général l'adresse mail",
+        "de": "Meist die E-Mail-Adresse",
+        "es": "Normalmente la dirección de correo"
+      },
+      "required": false
+    },
+    {
+      "key": "account_3_password",
+      "type": "secret",
+      "label": {
+        "en": "Password",
+        "fr": "Mot de passe",
+        "de": "Passwort",
+        "es": "Contraseña"
+      },
+      "description": {
+        "en": "The app password for Gmail, Outlook or iCloud.",
+        "fr": "Le mot de passe d'application pour Gmail, Outlook ou iCloud.",
+        "de": "Das App-Passwort bei Gmail, Outlook oder iCloud.",
+        "es": "La contraseña de aplicación para Gmail, Outlook o iCloud."
+      },
+      "required": false
+    },
+    {
+      "key": "account_3_folders",
+      "type": "string",
+      "label": {
+        "en": "Folders to watch",
+        "fr": "Dossiers à surveiller",
+        "de": "Zu überwachende Ordner",
+        "es": "Carpetas que vigilar"
+      },
+      "description": {
+        "en": "Comma-separated, 5 at most. The first one is watched in real time (IDLE).",
+        "fr": "Séparés par des virgules, 5 au plus. Le premier est surveillé en temps réel (IDLE).",
+        "de": "Durch Kommas getrennt, höchstens 5. Der erste wird in Echtzeit überwacht (IDLE).",
+        "es": "Separadas por comas, 5 como máximo. La primera se vigila en tiempo real (IDLE)."
+      },
+      "placeholder": {
+        "en": "e.g. INBOX, Alerts",
+        "fr": "ex. INBOX, Alertes",
+        "de": "z. B. INBOX, Alarme",
+        "es": "p. ej. INBOX, Alertas"
+      },
+      "required": false,
+      "default": "INBOX"
+    },
+    {
+      "key": "account_3_allow_self_signed",
+      "type": "boolean",
+      "label": {
+        "en": "Accept a self-signed certificate",
+        "fr": "Accepter un certificat auto-signé",
+        "de": "Selbstsigniertes Zertifikat akzeptieren",
+        "es": "Aceptar un certificado autofirmado"
+      },
+      "description": {
+        "en": "Only for a server of your own whose certificate you created yourself.",
+        "fr": "Seulement pour un serveur à vous dont vous avez créé le certificat.",
+        "de": "Nur für einen eigenen Server, dessen Zertifikat du selbst erstellt hast.",
+        "es": "Solo para un servidor propio cuyo certificado creó usted mismo."
+      },
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "options",
+      "type": "section",
+      "label": {
+        "en": "Options",
+        "fr": "Options",
+        "de": "Optionen",
+        "es": "Opciones"
+      }
+    },
+    {
+      "key": "subject_keywords",
+      "type": "string",
+      "label": {
+        "en": "Subject keywords",
+        "fr": "Mots-clés d'objet",
+        "de": "Betreff-Stichwörter",
+        "es": "Palabras clave del asunto"
+      },
+      "description": {
+        "en": "Comma-separated. A mail whose subject contains one fires the \"Keyword in a mail subject\" trigger (case and accents ignored).",
+        "fr": "Séparés par des virgules. Un mail dont l'objet en contient un déclenche « Mot-clé dans l'objet d'un mail » (casse et accents ignorés).",
+        "de": "Durch Kommas getrennt. Eine E-Mail, deren Betreff eines enthält, löst „Stichwort im Betreff einer E-Mail“ aus (ohne Groß-/Kleinschreibung und Akzente).",
+        "es": "Separadas por comas. Un correo cuyo asunto contenga una activa «Palabra clave en el asunto de un correo» (sin distinguir mayúsculas ni acentos)."
+      },
+      "placeholder": {
+        "en": "e.g. invoice, parcel, alarm",
+        "fr": "ex. facture, colis, alarme",
+        "de": "z. B. Rechnung, Paket, Alarm",
+        "es": "p. ej. factura, paquete, alarma"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "send_snippet",
+      "type": "boolean",
+      "label": {
+        "en": "Pass a short extract to the scenes",
+        "fr": "Transmettre un court extrait aux scènes",
+        "de": "Einen kurzen Auszug an die Szenen geben",
+        "es": "Pasar un breve extracto a las escenas"
+      },
+      "description": {
+        "en": "The first 200 characters of the text. Off: only sender and subject leave the mail server.",
+        "fr": "Les 200 premiers caractères du texte. Désactivé : seuls l'expéditeur et l'objet sortent du serveur.",
+        "de": "Die ersten 200 Zeichen des Textes. Aus: Nur Absender und Betreff verlassen den Mailserver.",
+        "es": "Los primeros 200 caracteres del texto. Desactivado: solo el remitente y el asunto salen del servidor."
+      },
+      "required": false,
+      "default": true
+    },
+    {
+      "key": "check_interval",
+      "type": "select",
+      "label": {
+        "en": "Full check every",
+        "fr": "Vérification complète toutes les",
+        "de": "Vollständige Prüfung alle",
+        "es": "Comprobación completa cada"
+      },
+      "description": {
+        "en": "The other folders and the unread counters. The first folder stays real time.",
+        "fr": "Les autres dossiers et les compteurs de non-lus. Le premier dossier reste en temps réel.",
+        "de": "Die anderen Ordner und die Zähler ungelesener E-Mails. Der erste Ordner bleibt in Echtzeit.",
+        "es": "Las demás carpetas y los contadores de no leídos. La primera carpeta sigue en tiempo real."
+      },
+      "required": false,
+      "default": "2",
+      "options": [
+        {
+          "value": "1",
+          "label": {
+            "en": "1 min",
+            "fr": "1 min",
+            "de": "1 Min.",
+            "es": "1 min"
+          }
+        },
+        {
+          "value": "2",
+          "label": {
+            "en": "2 min",
+            "fr": "2 min",
+            "de": "2 Min.",
+            "es": "2 min"
+          }
+        },
+        {
+          "value": "5",
+          "label": {
+            "en": "5 min",
+            "fr": "5 min",
+            "de": "5 Min.",
+            "es": "5 min"
+          }
+        },
+        {
+          "value": "15",
+          "label": {
+            "en": "15 min",
+            "fr": "15 min",
+            "de": "15 Min.",
+            "es": "15 min"
+          }
+        }
+      ]
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the names and messages",
+        "fr": "Langue des noms et des messages",
+        "de": "Sprache der Namen und Meldungen",
+        "es": "Idioma de los nombres y mensajes"
+      },
+      "description": {
+        "en": "Used for the unread counter name and the action messages.",
+        "fr": "Utilisée pour le nom du compteur de non-lus et les messages des actions.",
+        "de": "Für den Namen des Zählers und die Meldungen der Aktionen.",
+        "es": "Se usa para el nombre del contador y los mensajes de las acciones."
+      },
+      "required": false,
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion",
+        "de": "Verbindung testen",
+        "es": "Probar la conexión"
+      },
+      "timeout_seconds": 60
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "mail_received",
+      "label": {
+        "en": "Mail received",
+        "fr": "Mail reçu",
+        "de": "E-Mail empfangen",
+        "es": "Correo recibido"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "A new mail arrived in a watched folder.",
+        "fr": "Un nouveau mail est arrivé dans un dossier surveillé.",
+        "de": "Eine neue E-Mail ist in einem überwachten Ordner angekommen.",
+        "es": "Ha llegado un nuevo correo a una carpeta vigilada."
       },
       "fields": [
         {
-          "key": "device",
+          "key": "mailbox",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          },
+          "required": false
         },
         {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "key": "from_address",
+          "type": "string",
+          "label": {
+            "en": "Sender address",
+            "fr": "Adresse de l'expéditeur",
+            "de": "Adresse des Absenders",
+            "es": "Dirección del remitente"
+          },
+          "description": {
+            "en": "Exact address, in lower case. Empty: any sender.",
+            "fr": "Adresse exacte, en minuscules. Vide : tout expéditeur.",
+            "de": "Genaue Adresse, kleingeschrieben. Leer: jeder Absender.",
+            "es": "Dirección exacta, en minúsculas. Vacío: cualquier remitente."
+          },
+          "placeholder": {
+            "en": "e.g. alerts@example.com",
+            "fr": "ex. alertes@example.com",
+            "de": "z. B. alarm@example.com",
+            "es": "p. ej. alertas@example.com"
+          }
+        },
+        {
+          "key": "from_domain",
+          "type": "string",
+          "label": {
+            "en": "Sender domain",
+            "fr": "Domaine de l'expéditeur",
+            "de": "Domain des Absenders",
+            "es": "Dominio del remitente"
+          },
+          "description": {
+            "en": "What follows the @, in lower case. Empty: any domain.",
+            "fr": "Ce qui suit le @, en minuscules. Vide : tout domaine.",
+            "de": "Was nach dem @ steht, kleingeschrieben. Leer: jede Domain.",
+            "es": "Lo que sigue a la @, en minúsculas. Vacío: cualquier dominio."
+          },
+          "placeholder": {
+            "en": "e.g. example.com",
+            "fr": "ex. example.com",
+            "de": "z. B. example.com",
+            "es": "p. ej. example.com"
+          }
+        },
+        {
+          "key": "folder",
+          "type": "string",
+          "label": {
+            "en": "Folder",
+            "fr": "Dossier",
+            "de": "Ordner",
+            "es": "Carpeta"
+          },
+          "description": {
+            "en": "As written in the configuration. Empty: any watched folder.",
+            "fr": "Comme écrit dans la configuration. Vide : tout dossier surveillé.",
+            "de": "Wie in der Konfiguration geschrieben. Leer: jeder überwachte Ordner.",
+            "es": "Como está escrita en la configuración. Vacío: cualquier carpeta vigilada."
+          },
+          "placeholder": {
+            "en": "e.g. INBOX",
+            "fr": "ex. INBOX",
+            "de": "z. B. INBOX",
+            "es": "p. ej. INBOX"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "mailbox_name",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          }
+        },
+        {
+          "key": "folder",
+          "type": "string",
+          "label": {
+            "en": "Folder",
+            "fr": "Dossier",
+            "de": "Ordner",
+            "es": "Carpeta"
+          }
+        },
+        {
+          "key": "from_name",
+          "type": "string",
+          "label": {
+            "en": "Sender name",
+            "fr": "Nom de l'expéditeur",
+            "de": "Name des Absenders",
+            "es": "Nombre del remitente"
+          }
+        },
+        {
+          "key": "from_address",
+          "type": "string",
+          "label": {
+            "en": "Sender address",
+            "fr": "Adresse de l'expéditeur",
+            "de": "Adresse des Absenders",
+            "es": "Dirección del remitente"
+          }
+        },
+        {
+          "key": "subject",
+          "type": "string",
+          "label": {
+            "en": "Subject",
+            "fr": "Objet",
+            "de": "Betreff",
+            "es": "Asunto"
+          }
+        },
+        {
+          "key": "snippet",
+          "type": "string",
+          "label": {
+            "en": "Extract",
+            "fr": "Extrait",
+            "de": "Auszug",
+            "es": "Extracto"
+          }
+        },
+        {
+          "key": "received_at",
+          "type": "string",
+          "label": {
+            "en": "Received at",
+            "fr": "Reçu le",
+            "de": "Empfangen am",
+            "es": "Recibido el"
+          }
+        },
+        {
+          "key": "message_ref",
+          "type": "string",
+          "label": {
+            "en": "Mail reference",
+            "fr": "Référence du mail",
+            "de": "E-Mail-Referenz",
+            "es": "Referencia del correo"
+          }
+        }
+      ]
+    },
+    {
+      "key": "subject_keyword",
+      "label": {
+        "en": "Keyword in a mail subject",
+        "fr": "Mot-clé dans l'objet d'un mail",
+        "de": "Stichwort im Betreff einer E-Mail",
+        "es": "Palabra clave en el asunto de un correo"
+      },
+      "description": {
+        "en": "A new mail whose subject contains one of the keywords of the configuration.",
+        "fr": "Un nouveau mail dont l'objet contient un des mots-clés de la configuration.",
+        "de": "Eine neue E-Mail, deren Betreff eines der Stichwörter der Konfiguration enthält.",
+        "es": "Un nuevo correo cuyo asunto contiene una de las palabras clave de la configuración."
+      },
+      "fields": [
+        {
+          "key": "mailbox",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          },
+          "required": false
+        },
+        {
+          "key": "keyword",
+          "type": "string",
+          "label": {
+            "en": "Keyword",
+            "fr": "Mot-clé",
+            "de": "Stichwort",
+            "es": "Palabra clave"
+          },
+          "description": {
+            "en": "Written as in the configuration. Empty: any keyword.",
+            "fr": "Écrit comme dans la configuration. Vide : n'importe quel mot-clé.",
+            "de": "So geschrieben wie in der Konfiguration. Leer: jedes Stichwort.",
+            "es": "Escrita como en la configuración. Vacío: cualquier palabra clave."
+          },
+          "placeholder": {
+            "en": "e.g. invoice",
+            "fr": "ex. facture",
+            "de": "z. B. Rechnung",
+            "es": "p. ej. factura"
+          }
+        },
+        {
+          "key": "from_address",
+          "type": "string",
+          "label": {
+            "en": "Sender address",
+            "fr": "Adresse de l'expéditeur",
+            "de": "Adresse des Absenders",
+            "es": "Dirección del remitente"
+          },
+          "description": {
+            "en": "Exact address, in lower case. Empty: any sender.",
+            "fr": "Adresse exacte, en minuscules. Vide : tout expéditeur.",
+            "de": "Genaue Adresse, kleingeschrieben. Leer: jeder Absender.",
+            "es": "Dirección exacta, en minúsculas. Vacío: cualquier remitente."
+          },
+          "placeholder": {
+            "en": "e.g. alerts@example.com",
+            "fr": "ex. alertes@example.com",
+            "de": "z. B. alarm@example.com",
+            "es": "p. ej. alertas@example.com"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "keyword",
+          "type": "string",
+          "label": {
+            "en": "Keyword",
+            "fr": "Mot-clé",
+            "de": "Stichwort",
+            "es": "Palabra clave"
+          }
+        },
+        {
+          "key": "mailbox_name",
+          "type": "string",
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          }
+        },
+        {
+          "key": "folder",
+          "type": "string",
+          "label": {
+            "en": "Folder",
+            "fr": "Dossier",
+            "de": "Ordner",
+            "es": "Carpeta"
+          }
+        },
+        {
+          "key": "from_name",
+          "type": "string",
+          "label": {
+            "en": "Sender name",
+            "fr": "Nom de l'expéditeur",
+            "de": "Name des Absenders",
+            "es": "Nombre del remitente"
+          }
+        },
+        {
+          "key": "from_address",
+          "type": "string",
+          "label": {
+            "en": "Sender address",
+            "fr": "Adresse de l'expéditeur",
+            "de": "Adresse des Absenders",
+            "es": "Dirección del remitente"
+          }
+        },
+        {
+          "key": "subject",
+          "type": "string",
+          "label": {
+            "en": "Subject",
+            "fr": "Objet",
+            "de": "Betreff",
+            "es": "Asunto"
+          }
+        },
+        {
+          "key": "snippet",
+          "type": "string",
+          "label": {
+            "en": "Extract",
+            "fr": "Extrait",
+            "de": "Auszug",
+            "es": "Extracto"
+          }
+        },
+        {
+          "key": "received_at",
+          "type": "string",
+          "label": {
+            "en": "Received at",
+            "fr": "Reçu le",
+            "de": "Empfangen am",
+            "es": "Recibido el"
+          }
+        },
+        {
+          "key": "message_ref",
+          "type": "string",
+          "label": {
+            "en": "Mail reference",
+            "fr": "Référence du mail",
+            "de": "E-Mail-Referenz",
+            "es": "Referencia del correo"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "get_unread_count",
+      "label": {
+        "en": "Read the unread count",
+        "fr": "Lire le nombre de non-lus",
+        "de": "Anzahl ungelesener E-Mails lesen",
+        "es": "Leer el número de no leídos"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Asks the server for the unread mails of a mailbox, for a condition or a message.",
+        "fr": "Demande au serveur les mails non lus d'une boîte, pour une condition ou un message.",
+        "de": "Fragt den Server nach den ungelesenen E-Mails eines Postfachs, für eine Bedingung oder Nachricht.",
+        "es": "Pide al servidor los correos no leídos de un buzón, para una condición o un mensaje."
+      },
+      "timeout_seconds": 30,
       "fields": [
         {
-          "key": "device",
+          "key": "mailbox",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          },
           "required": true
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
+          "key": "unread",
+          "type": "number",
+          "label": {
+            "en": "Unread mails",
+            "fr": "Mails non lus",
+            "de": "Ungelesene E-Mails",
+            "es": "Correos no leídos"
+          }
+        }
+      ]
+    },
+    {
+      "key": "mark_as_read",
+      "label": {
+        "en": "Mark as read",
+        "fr": "Marquer comme lu",
+        "de": "Als gelesen markieren",
+        "es": "Marcar como leído"
+      },
+      "description": {
+        "en": "Marks the mail of the trigger as read: insert its \"Mail reference\" variable.",
+        "fr": "Marque comme lu le mail du déclencheur : insérez sa variable « Référence du mail ».",
+        "de": "Markiert die E-Mail des Auslösers als gelesen: Füge ihre Variable „E-Mail-Referenz“ ein.",
+        "es": "Marca como leído el correo del desencadenante: inserte su variable «Referencia del correo»."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "mailbox",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          },
+          "required": true
+        },
+        {
+          "key": "message_ref",
+          "type": "string",
+          "label": {
+            "en": "Mail reference",
+            "fr": "Référence du mail",
+            "de": "E-Mail-Referenz",
+            "es": "Referencia del correo"
+          },
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "marked",
           "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "label": {
+            "en": "Marked as read",
+            "fr": "Marqué comme lu",
+            "de": "Als gelesen markiert",
+            "es": "Marcado como leído"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "latest_mails",
+      "label": {
+        "en": "Latest mails",
+        "fr": "Derniers mails",
+        "de": "Neueste E-Mails",
+        "es": "Últimos correos"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "Unread counter and the last mails received: sender, subject, time.",
+        "fr": "Compteur de non-lus et derniers mails reçus : expéditeur, objet, heure.",
+        "de": "Ungelesen-Zähler und die letzten E-Mails: Absender, Betreff, Uhrzeit.",
+        "es": "Contador de no leídos y últimos correos: remitente, asunto, hora."
+      },
+      "icon": "mail",
+      "settings": [
+        {
+          "key": "mailbox",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Mailbox",
+            "fr": "Boîte mail",
+            "de": "Postfach",
+            "es": "Buzón"
+          },
+          "required": false,
+          "description": {
+            "en": "Empty: every mailbox.",
+            "fr": "Vide : toutes les boîtes.",
+            "de": "Leer: alle Postfächer.",
+            "es": "Vacío: todos los buzones."
+          }
+        }
+      ]
     }
   ]
 }
