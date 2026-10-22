@@ -8,8 +8,8 @@
     "de": "Eingehende E-Mails als Szenenauslöser, Ungelesen-Zähler und ein Widget der neuesten E-Mails.",
     "es": "Correos recibidos como desencadenantes, contadores de no leídos y un widget de últimos correos."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/guim31/gladys-imap:1.0.0",
+  "version": "1.0.1",
+  "docker_image": "ghcr.io/guim31/gladys-imap:1.0.1",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/guim31/gladys-imap/main/cover.png",
   "categories": ["notifications", "services"],
